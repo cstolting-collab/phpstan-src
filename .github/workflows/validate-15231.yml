@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/15231-parser-cache-routing
+      - validate/15231-red
 
 permissions:
   contents: read
