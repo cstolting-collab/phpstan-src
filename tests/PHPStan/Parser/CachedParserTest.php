@@ -201,10 +201,14 @@ class CachedParserTest extends PHPStanTestCase
 	public function testParseFileDoesNotReuseCleanedAstForAnalysedFileWithSameContents(): void
 	{
 		$fileHelper = self::getContainer()->getByType(FileHelper::class);
+		$cleaningParser = new CleaningParser(
+			self::getContainer()->getService('currentPhpVersionSimpleDirectParser'),
+			self::getContainer()->getByType(\PHPStan\Php\PhpVersion::class),
+		);
 		$pathRoutingParser = new PathRoutingParser(
 			$fileHelper,
 			self::getContainer()->getService('currentPhpVersionRichParser'),
-			self::getContainer()->getService('currentPhpVersionSimpleParser'),
+			$cleaningParser,
 			self::getContainer()->getService('php8Parser'),
 			null,
 		);
