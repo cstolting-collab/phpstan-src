@@ -198,6 +198,45 @@ class CachedParserTest extends PHPStanTestCase
 		$this->assertSame(2, $stmts[0]->stmts[1]->expr->expr->class->getAttribute(AnonymousClassVisitor::ATTRIBUTE_LINE_INDEX));
 	}
 
+	public function testParseFileDoesNotReuseCleanedAstForAnalysedFileWithSameContents(): void
+	{
+		$fileHelper = self::getContainer()->getByType(FileHelper::class);
+		$cleaningParser = new CleaningParser(
+			self::getContainer()->getService('currentPhpVersionSimpleDirectParser'),
+			self::getContainer()->getByType(\PHPStan\Php\PhpVersion::class),
+		);
+		$pathRoutingParser = new PathRoutingParser(
+			$fileHelper,
+			self::getContainer()->getService('currentPhpVersionRichParser'),
+			$cleaningParser,
+			self::getContainer()->getService('php8Parser'),
+			null,
+		);
+		$parser = new CachedParser($pathRoutingParser, 500, 4194304);
+		$source = "<?php class CachedParserRoutingRegression { public function answer(): int { return 42; } }\n";
+		$reflectionPath = sys_get_temp_dir() . '/phpstan-cached-parser-reflection-' . uniqid() . '.php';
+		$analysedPath = sys_get_temp_dir() . '/phpstan-cached-parser-analysed-' . uniqid() . '.php';
+
+		try {
+			file_put_contents($reflectionPath, $source);
+			file_put_contents($analysedPath, $source);
+			$pathRoutingParser->setAnalysedFiles([$fileHelper->normalizePath($analysedPath)]);
+
+			$reflectionStmts = $parser->parseFile($reflectionPath);
+			$this->assertInstanceOf(Node\Stmt\Class_::class, $reflectionStmts[0]);
+			$this->assertInstanceOf(Node\Stmt\ClassMethod::class, $reflectionStmts[0]->stmts[0]);
+			$this->assertSame([], $reflectionStmts[0]->stmts[0]->stmts);
+
+			$analysedStmts = $parser->parseFile($analysedPath);
+			$this->assertInstanceOf(Node\Stmt\Class_::class, $analysedStmts[0]);
+			$this->assertInstanceOf(Node\Stmt\ClassMethod::class, $analysedStmts[0]->stmts[0]);
+			$this->assertCount(1, $analysedStmts[0]->stmts[0]->stmts);
+		} finally {
+			@unlink($reflectionPath);
+			@unlink($analysedPath);
+		}
+	}
+
 	public function testWithExprCacheHelper(): void
 	{
 		$fileHelper = self::getContainer()->getByType(FileHelper::class);
