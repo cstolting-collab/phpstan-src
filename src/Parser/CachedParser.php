@@ -44,6 +44,9 @@ final class CachedParser implements Parser
 	/** @var array<string, true> */
 	private array $parsedByString = [];
 
+	/** @var array<string, string> source code => file path that produced the cached AST */
+	private array $parsedFileByString = [];
+
 	/** @var LruCache<array{int, int, string}> path => [mtime, size, source code] */
 	private LruCache $cachedSourceByFile;
 
@@ -78,7 +81,11 @@ final class CachedParser implements Parser
 	{
 		$sourceCode = $this->readFile($file);
 		$cachedNodes = $this->cachedNodesByString->get($sourceCode);
-		if ($cachedNodes !== null && !isset($this->parsedByString[$sourceCode])) {
+		if (
+			$cachedNodes !== null
+			&& !isset($this->parsedByString[$sourceCode])
+			&& ($this->parsedFileByString[$sourceCode] ?? null) === $file
+		) {
 			return $cachedNodes;
 		}
 
@@ -88,11 +95,13 @@ final class CachedParser implements Parser
 			// no net change to the entry count, just refresh its LRU position
 			$this->cachedNodesByString->replace($sourceCode, $nodes);
 			unset($this->parsedByString[$sourceCode]);
+			$this->parsedFileByString[$sourceCode] = $file;
 
 			return $nodes;
 		}
 
 		$this->store($sourceCode, $nodes);
+		$this->parsedFileByString[$sourceCode] = $file;
 
 		return $nodes;
 	}
@@ -110,6 +119,7 @@ final class CachedParser implements Parser
 		$nodes = $this->originalParser->parseString($sourceCode);
 		$this->store($sourceCode, $nodes);
 		$this->parsedByString[$sourceCode] = true;
+		unset($this->parsedFileByString[$sourceCode]);
 
 		return $nodes;
 	}
@@ -121,6 +131,7 @@ final class CachedParser implements Parser
 	{
 		foreach ($this->cachedNodesByString->set($sourceCode, $nodes, strlen($sourceCode)) as $evictedSourceCode) {
 			unset($this->parsedByString[$evictedSourceCode]);
+			unset($this->parsedFileByString[$evictedSourceCode]);
 		}
 	}
 
